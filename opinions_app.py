@@ -1,10 +1,12 @@
 # what_to_watch/opinions_app.py
 
-# Новый импорт
+import csv
 from datetime import datetime
 from random import randrange
 
+import click
 from flask import Flask, redirect, render_template, url_for, flash, abort
+from flask_migrate import Migrate
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, TextAreaField, URLField
@@ -17,6 +19,7 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = 'qwerty'
 
 db = SQLAlchemy(app)
+migrate = Migrate(app, db)
 
 
 class Opinion(db.Model):
@@ -25,6 +28,7 @@ class Opinion(db.Model):
     text = db.Column(db.Text, unique=True, nullable=False)
     source = db.Column(db.String(256))
     timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    added_by = db.Column(db.String(64))
 
 
 class OpinionForm(FlaskForm):
@@ -42,6 +46,27 @@ class OpinionForm(FlaskForm):
         validators=[Length(1, 256), Optional()]
     )
     submit = SubmitField('Добавить')
+
+
+@app.cli.command('load_opinions')
+def load_opinions_command():
+    """Функция загрузки мнений в базу данных."""
+    # Открывается файл
+    with open('opinions.csv', encoding='utf-8') as f:
+        # Создаётся итерируемый объект, который отображает каждую строку
+        # в качестве словаря с ключами из шапки файла
+        reader = csv.DictReader(f)
+        # Для подсчёта строк добавляется счётчик
+        counter = 0
+        for row in reader:
+            # Распакованный словарь можно использовать
+            # для создания объекта мнения
+            opinion = Opinion(**row)
+            # Изменения нужно зафиксировать
+            db.session.add(opinion)
+            db.session.commit()
+            counter += 1
+    click.echo(f'Загружено мнений: {counter}')
 
 
 @app.errorhandler(404)
